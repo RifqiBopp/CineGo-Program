@@ -1,0 +1,848 @@
+using System;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Microsoft.Data.Sqlite;
+
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        SetUpDatabase(); /// panggil databasenya 
+        
+        bool running = true;
+        do
+        {
+            // Console.Clear(); /// membersihkan layar untuk menu baru, agar ga terlihat penuh dari kodingan sebelumnya yang sudah di running. It's okay if u dont want this :) 
+
+            Console.WriteLine("=== Welcome To CineGO ===");
+            Console.WriteLine("==== Menu ====");
+            Console.WriteLine("1. Register Customer");
+            Console.WriteLine("2. Transaction");
+            Console.WriteLine("3. List Customer");
+            Console.WriteLine("4. Update Customer");
+            Console.WriteLine("--------------------------");
+            Console.WriteLine("5. Delete Customer ");
+            Console.WriteLine("6. Delete Transaction");
+            Console.WriteLine("7. Delete Film");
+            Console.WriteLine("--------------------------");
+            Console.WriteLine("8. Exit");
+            Console.WriteLine("");
+            Console.WriteLine("9. Add New Films/Movies");
+            Console.WriteLine("10. List Films/Movies: ");
+            Console.WriteLine("11. Update Film");
+            Console.WriteLine("12. List Transaction Customer");
+            Console.WriteLine("13. Update Stock Film");
+            Console.Write("Choose an option: ");
+            
+            int choice = Convert.ToInt32(Console.ReadLine());
+
+            switch (choice)
+            {
+              case 1 : 
+                registration(); 
+              break;
+
+              case 2 :
+                CaridanTransaksi();
+              break;
+
+              case 3 : 
+                DaftarCustomer();
+              break;
+
+              case 4 : 
+                UpdateCustomer();
+              break;
+
+              case 5 : 
+                hapusCustomer();
+              break;
+
+              case 6 : 
+                hapusTransaksi();
+              break;
+
+              case 7 : 
+                hapusFilm();
+              break;
+
+              case 8 :
+                running = false;
+                Console.WriteLine("Terimakasih sudah menggunakan program ini");
+              break;
+
+              case 9 :
+                TambahFilm();
+              break;
+
+              case 10:
+                DaftarFilm();
+              break;
+
+              case 11:
+                UpdateFilm();
+              break;
+
+              case 12:
+                DaftarTransaction();
+              break;
+
+              case 13:
+                MenuTambahStock();
+              break;
+              
+              default :
+                Console.WriteLine(" Maaf anda salah menginputkan angka dari 1-13 saja!. Coba lagi : ");
+              break;
+            }
+        }while(running);
+    }
+    
+    /// untuk menghubungkan kode dengan database sql server
+    static string connectionString = "Data Source = MovieRentalDB.db;";
+
+    /// untuk membuat database dalam kode
+    static void SetUpDatabase()
+    {
+        try 
+        {
+            using(var connection = new SqliteConnection(connectionString)) /// kegunaan using var disini agar bisa automatic menutup koneksi jika sudah selesai, tidak perlu menggunakan syntax : connection.Close(); lagi
+            {
+                connection.Open(); /// membuka koneksi 
+
+                /// sql query untuk table Users :
+                string createUsersTable = @"
+                    CREATE TABLE IF NOT EXISTS Users (
+                        nim INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        email TEXT)";
+                /// eksekusi query pembuatan tabel 'Users' --> membuat table Users di databasenya
+                using (var cmd = new SqliteCommand(createUsersTable, connection))
+                {
+                    cmd.ExecuteNonQuery(); // syntax untuk tidak mengembalikan data, karena disini struktur ini hanya ingin membuat table di databasenya
+                }
+                
+                
+                /// Untuk table Films : 
+                string createFilmsTable = @"
+                    CREATE TABLE IF NOT EXISTS FILMS(
+                        ID_Films INTEGER PRIMARY KEY AUTOINCREMENT, 
+                        Judul_films TEXT NOT NULL,
+                        BuyPrice INTEGER,
+                        RentPrice_Week INTEGER,
+                        RentPrice_Month INTEGER,
+                        Stock INTEGER DEFAULT 0)"; 
+                        /// AUTOINCREMENT (SQLite): ID akan terus bertambah otomatis tanpa mengisi ulang ID yang dihapus, dan tidak ada opsi untuk mengatur mulai atau increment. IDENTITY(1,1) (SQL Server): Sama seperti AUTOINCREMENT, tapi lebih fleksibel karena bisa mengatur nilai awal (start) dan increment-nya. Jadi kalau IDENTITY(1,1) maka berjalan dari 1 bertambah 1, atau (1000, 5) dari 1000 bertambah 5 so (1000, 1005, 1010, ...) . kalau AUTOINCREMENT dari angka 1 saja
+                        /// eksekusi query table Films :
+                using(var cmd = new SqliteCommand(createFilmsTable,connection))
+                {
+                    cmd.ExecuteNonQuery(); 
+                }
+
+
+                /// table transactions : 
+                string createTransactionsTable = @"
+                    CREATE TABLE IF NOT EXISTS Transactions(
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nim INTEGER,
+                        ID_Films INTEGER,
+                        Total_Price INTEGER,
+                        Transaction_Type TEXT,
+                        Date_Transaction TEXT,
+                        FOREIGN KEY(nim) REFERENCES Users(nim),
+                        FOREIGN KEY(ID_Films) REFERENCES Films(ID_Films))";
+
+                //// ekesuki query table
+                using(var cmd = new SqliteCommand(createTransactionsTable, connection))
+                {
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+        catch (SqliteException ex)
+        {
+            Console.WriteLine("Database error: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("An error occurred: " + ex.Message);
+        } /// penanganan jika salah ada yang salah dalam databasnya
+    }
+
+    /// customer registration 
+    static void registration()
+    {
+    
+        Console.Write("Masukan Nama : ");
+        string name = Console.ReadLine() ?? "Default name";
+
+        Console.Write("Masukan Email : ");
+        string Email = Console.ReadLine() ?? "Default name";
+
+        // Console.Write("Buat Password : ");   
+        // string Password = Console.ReadLine() ?? "Default name";
+
+       // Cek apakah email sudah terdaftar
+        using (var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            // Query untuk memeriksa apakah email sudah terdaftar
+            string checkEmailQuery = "SELECT COUNT(*) FROM Users WHERE email = @Email";
+            using (var cmd = new SqliteCommand(checkEmailQuery, connection))
+            {
+                cmd.Parameters.AddWithValue("@Email", Email);
+                int emailExists = Convert.ToInt32(cmd.ExecuteScalar());
+                if (emailExists > 0)
+                {
+                    Console.WriteLine("Email sudah terdaftar.");
+                    return; // Berhenti jika email sudah terdaftar
+                }
+            }
+        }
+        
+
+        /// simpan data ke databse users 
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+            
+            /// query  untuk menambahkan pelanggan baru
+            string query = "INSERT INTO Users (name, email) VALUES (@name, @email)";
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@name", name); /// Mengganti placeholder @nama di query dengan nilai nama yang dikirim ke fungsi.
+                cmd.Parameters.AddWithValue("@email", Email); /// Mengganti placeholder @email di query dengan nilai Email yang dikirim ke fungsi.
+                // cmd.Parameters.AddWithValue("@password", Password);
+
+                cmd.ExecuteNonQuery();
+
+                Console.WriteLine();
+            }
+
+            Console.WriteLine("Pelanggan berhasil terdaftarkan ! ");
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+    //// tambah film 
+    static void TambahFilm()
+    {
+        Console.Write("Masukan Judul film: ");
+        string Judul = Console.ReadLine() ?? "Default name";
+
+        Console.Write("Masukan harga beli :");
+        int HargaBeli = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukan harga Sewa per-Mingguan : ");
+        int RentPrice_Week = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukan harga sewa per-Bulanan :");
+        int RentPrice_Month = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukan stock film : ");
+        int Stock = Convert.ToInt32(Console.ReadLine());
+
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+            String query = @"INSERT INTO Films (Judul_films, BuyPrice, RentPrice_Week, RentPrice_Month, Stock)
+                             VALUES (@Judul_films, @BuyPrice, @RentPrice_Week, @RentPrice_Month, @Stock)";
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@Judul_films", Judul);
+                cmd.Parameters.AddWithValue("@BuyPrice", HargaBeli);
+                cmd.Parameters.AddWithValue("@RentPrice_Week", RentPrice_Week);
+                cmd.Parameters.AddWithValue("@RentPrice_Month", RentPrice_Month);
+                cmd.Parameters.AddWithValue("@Stock", Stock);
+
+                cmd.ExecuteNonQuery(); /// tidak perlu mengembalikan nilai 
+
+                Console.WriteLine();
+            }            
+
+            Console.WriteLine("Film berhasil ditambahkan !");     
+            
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+    /// daftar film
+    static void DaftarFilm()
+    {
+        Console.WriteLine("Daftar Film");
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string query = "SELECT * FROM Films ORDER BY Judul_films ASC"; /// mengambil semua data dari table Films, ASC = Ascending, mengurutkan angka/huruf/tanggal dari kecil - besar
+            using (var cmd = new SqliteCommand(query, connection))
+            using(var reader = cmd.ExecuteReader()) /// Menjalankan query SQL dan mengembalikan objek pembaca data (reader).
+            {
+               while(reader.Read())
+               {
+                Console.WriteLine($"ID Film: {reader["ID_Films"]}, Judul : {reader["Judul_films"]}, Harga Beli : {reader["BuyPrice"]}, Sewa Mingguan : {reader["RentPrice_Week"]}, Sewa Bulanan : {reader["RentPrice_Month"]}, Stock : {reader["Stock"]}");
+               }
+            }
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+     static void DaftarTransaction()
+    {
+        Console.WriteLine("===== Data Para Pembeli =====");
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string query = "SELECT * FROM Transactions ORDER BY Date_Transaction DESC"; /// DESC = descending, urut angka/abjad even date dari besar - kecil
+
+            using(var cmd = new SqliteCommand(query, connection))
+            { /// boleh pakai {}, bolej juga tidak.. karena using var melakukan secara otomatis men-disposal kode, atau mennggunakna menyambungkan database agar bisa di pakai, so using var akan membaca sesuatu hanya dibaris kode setelahnya. 
+                using(var reader = cmd.ExecuteReader())
+                {
+                    while(reader.Read())
+                    {
+                        Console.WriteLine(@$"
+                               <------>     ID Transaksi-nya : {reader["id"]}  
+                                  .         NIM Pelanggan : {reader["nim"]} 
+                                  .         ID Film : {reader["ID_Films"]}
+                                            Total Harga : {reader["Total_Price"]}
+                                            Tipe Transaksi : {reader["Transaction_Type"]}
+                                            Tanggal : {reader["Date_Transaction"]}");
+                    }
+                }
+            }
+        }
+        Console.WriteLine();
+    }
+
+
+    /// harga beli dan sewa film
+    public static class Filmservice
+    {
+        public static int HargaBeliFilm(int ID_Films)
+        {
+             using(var connection = new SqliteConnection(connectionString))
+             {
+                connection.Open();
+
+                string query = "SELECT BuyPrice FROM Films WHERE ID_Films = @ID_Films";
+                using(var cmd = new SqliteCommand(query, connection))
+                {
+                    cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                    return Convert.ToInt32(cmd.ExecuteScalar()); /// ngambil nilai ID film buat tau harga.
+                }
+             }
+        }
+
+        public static int HargaSewaFilm(int ID_Films, bool bulanan)
+        {
+            using(var connection = new SqliteConnection(connectionString))
+            {
+                connection.Open();
+
+                string query;
+                    if(bulanan)
+                    {
+                        query = "SELECT RentPrice_Month FROM Films WHERE ID_Films = @ID_Films";
+                    }
+                    else
+                    {
+                        query = "SELECT RentPrice_Week FROM Films WHERE ID_Films =  @ID_Films";
+                    }
+
+                using(var cmd = new SqliteCommand(query,connection))
+                {
+                    cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                    return Convert.ToInt32(cmd.ExecuteScalar());
+                }
+            }
+        }
+    }
+
+    ///// -------------------------------  beli film
+    static void BeliFilm(int nim, int ID_Films)
+    {
+        Console.Write("Masukan jumlah film yang ingin dibeli : ");
+        int jumlah = Convert.ToInt32(Console.ReadLine());
+
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            /// stock film 
+            string CheckStoryQuery = "SELECT Stock FROM Films WHERE ID_Films = @ID_Films";
+            using(var cmd = new SqliteCommand (CheckStoryQuery, connection))
+            {
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                int Stock = Convert.ToInt32(cmd.ExecuteScalar()); /// hasil uqery adalah jumlah stock saat ini, disimpan di variabel Stock. Buat ngecek stock-nya   
+
+                if(Stock < jumlah)
+                { 
+                   Console.WriteLine("Stock tidak mencukupi. Apakah Anda ingin memilih film lain? (YA/TIDAK)");
+                    string pilihan = Console.ReadLine()?? "Default name".ToUpper();
+
+                    if (pilihan == "Y")
+                    {
+                        DaftarFilm();  // Menampilkan daftar film untuk dipilih
+                    }
+                    return; // keluar dari fungsi jika stok tidak mencukupi
+                }
+            }
+
+            /// lakukan transaksi 
+            int Total_Price = Filmservice.HargaBeliFilm(ID_Films) * jumlah ; /// calculate total price on quantity
+            string query = @"INSERT INTO Transactions (nim, ID_Films, Transaction_Type, Total_Price, Date_Transaction)
+                             VALUES (@nim, @ID_Films, 'Beli', @Total_Price, @Date_Transaction)";
+         
+            using(var cmd = new SqliteCommand(query,connection))
+            {
+                cmd.Parameters.AddWithValue("@nim", nim);
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                cmd.Parameters.AddWithValue("@Total_Price", Total_Price);
+                cmd.Parameters.AddWithValue("@Date_Transaction", DateTime.Now);
+
+                cmd.ExecuteNonQuery();
+            }
+       
+
+            /// kurangi stock 
+            string UpdateStockQuery = "UPDATE Films SET Stock = Stock - @jumlah WHERE ID_Films = @ID_Films";
+            using ( var cmd = new SqliteCommand(UpdateStockQuery, connection))
+            {
+                cmd.Parameters.AddWithValue ("@jumlah", jumlah);
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                cmd.ExecuteNonQuery();
+            }
+    
+            Console.WriteLine($"Film berhasil dibeli ");
+        }    
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+
+
+    static void SewaFilm(int nim ,int ID_Films)
+    {
+        Console.WriteLine("1. Sewa per-Minggu");
+        Console.WriteLine("2. Sewa per-Bulanan");
+        Console.Write("Pilih jenis Sewa : ");
+        int pilihanSewaFilm = Convert.ToInt32(Console.ReadLine());
+
+        bool bulanan = pilihanSewaFilm == 2;
+        string Transaction_Type;
+
+        if(bulanan)
+        {
+            Transaction_Type = "Sewa Bulanan";
+        }
+        else
+        {
+            Transaction_Type = "Sewa Mingguan";
+        }
+        
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            //// cek stock filmnya 
+            string CheckStoryQuery = "SELECT stock FROM Films WHERE ID_Films = @ID_Films";
+
+            using(var cmd = new SqliteCommand(CheckStoryQuery, connection))
+            {
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                int stock = Convert.ToInt32(cmd.ExecuteScalar());
+
+                if(stock < 1)
+                {
+                    Console.WriteLine($"Maaf, Stock film : {ID_Films} Sudah habis. Ingin memilih film lain? (YA/TIDAK)");
+                    string pilihan = Console.ReadLine()??"Default name".ToUpper();
+
+                    if (pilihan == "Y")
+                    {
+                        DaftarFilm();  // Menampilkan daftar film untuk dipilih
+                    }
+                    return; // keluar jika stock film habis
+                }
+            }
+
+            /// hitung harga sewa 
+            int Total_Price = Filmservice.HargaSewaFilm(ID_Films, bulanan);
+
+            //// manggil tablenya
+            string query = @"INSERT INTO Transactions (nim, ID_Films, Total_Price, Transaction_Type, Date_Transaction)
+                            VALUES (@nim, @ID_Films, @Total_Price, @Transaction_Type, @Date_Transaction)";
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@nim", nim);
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                cmd.Parameters.AddWithValue("@Total_Price", Total_Price);
+                cmd.Parameters.AddWithValue("@Transaction_Type", Transaction_Type);
+                cmd.Parameters.AddWithValue("@Date_Transaction", DateTime.Now);
+
+                cmd.ExecuteNonQuery();
+            }
+
+            /// kurangi stock
+            string UpdateStockQuery = "UPDATE Films SET Stock = Stock - 1 WHERE ID_Films = @ID_Films";
+            using(var cmd = new SqliteCommand(UpdateStockQuery, connection))
+            {
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                cmd.ExecuteNonQuery();
+            }
+
+            Console.WriteLine($"Film dengan id : {ID_Films} berhasil disewa ({Transaction_Type})");
+        }
+
+            Console.WriteLine(); // buat space kosong
+    }
+
+
+    
+    ///
+    static void MenuTambahStock()
+    {
+        Console.Write("Masukkan ID Film: ");
+        int filmId = Convert.ToInt32(Console.ReadLine());
+        
+        Console.Write("Masukkan jumlah stock yang ingin ditambah: ");
+        int tambahJumlah = Convert.ToInt32(Console.ReadLine());
+        
+        TambahStockFilm(filmId, tambahJumlah);
+    }
+
+    //// TAMBAH STOCK FILM
+    static void TambahStockFilm(int ID_Films, int jumlah)
+    {
+        using( var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string UpdateStockQuery = "UPDATE Films SET Stock = Stock + @jumlah WHERE ID_Films = @ID_Films";
+            using(var cmd = new SqliteCommand(UpdateStockQuery, connection))
+            {
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                cmd.Parameters.AddWithValue("@jumlah", jumlah);
+                cmd.ExecuteNonQuery();
+            }
+        }
+        Console.WriteLine($"Stock Film dengan id : {ID_Films}, berhasil ditambah sebanyak {jumlah}");
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+    //// cek stock FIlmnya
+    static bool CekStockFilm(int ID_Films)
+    {
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string query = "SELECT Stock FROM Films WHERE ID_Films = @ID_Films";
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                int stok = Convert.ToInt32(cmd.ExecuteScalar());
+                return stok > 0;
+            }
+        }
+    }
+
+    
+    //// function untuk cari pelanggan yang sudah daftar agar bisa transaksi
+    static void CaridanTransaksi()
+    {
+        Console.Write("Masukan nama pelanggan : ");
+        string name = Console.ReadLine() ?? "Default name  ";
+
+        int nim = CariCostumer(name);
+
+        if(nim == -1)
+        {
+            Console.WriteLine($"Nama pelanggan = {name} yang anda cari tidak ditemukan");
+            return; /// jika customer tidak ditemukan, keluar dari method
+        }
+
+        DaftarFilm();
+
+        Console.Write("Masukan ID Film yang dipilih : ");
+        int ID_Films = Convert.ToInt32(Console.ReadLine());
+
+         // Tambahkan pengecekan stok sebelum melanjutkan transaksi
+        if (!CekStockFilm(ID_Films))
+        {
+            Console.WriteLine("Film yang dipilih tidak tersedia (stok habis).");
+            return;
+        }
+
+        Console.WriteLine("Pilih Tipe transaksi film : ");
+        Console.WriteLine("1. Beli Film");
+        Console.WriteLine("2. Sewa Film : ");
+        Console.Write("Pilih Opsi : ");
+        int opsi = Convert.ToInt32(Console.ReadLine());
+
+        if(opsi == 1)
+        {
+            BeliFilm(nim, ID_Films);
+        }
+        else if(opsi == 2)
+        {
+            SewaFilm(nim, ID_Films);
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+    static void hapusFilm()
+    {
+        Console.WriteLine("==== menu Hapus Film ====");
+        Console.Write("Masukan ID Film yang ingin dihapus : ");
+
+        if(int.TryParse(Console.ReadLine(), out int ID_Films))
+        {
+            try
+            {
+                using(var connection = new SqliteConnection(connectionString))
+                {
+                    connection.Open();
+
+                    string query = "DELETE FROM Films WHERE ID_Films = @ID_Films";
+                    using(var cmd = new SqliteCommand(query, connection))
+                    {
+                        cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                        cmd.ExecuteNonQuery();
+                    }
+                    Console.WriteLine("Film berhasil dihapus");
+                }
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine("------ Error: jika mau menghapus customer, hapus transaksi-nya terlebih dahulu" + ex.Message); /// gabisa asal diubah karena saya menghubungkna film dengan transaksi table
+            }
+        }
+        else
+        {
+            Console.WriteLine("Film tidak ditemukan !");
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+
+//// -----------------------------------------------------------------------
+    static void hapusTransaksi()
+    {
+        Console.WriteLine("==== Menu hapus transaksi ===");
+        Console.Write("Masukan ID transaksi : ");
+
+        if(int.TryParse(Console.ReadLine(), out int Id))
+        {
+            using(var connection = new SqliteConnection(connectionString))
+            {
+                connection.Open();
+
+                string query = "DELETE FROM 'Transactions' WHERE Id = @Id"; /// kenapa pakai '' untuk transaction? karen kata transaction itu kalimat yang bisa dijadikan suatu syntax(reserved word) di sql...jadi dikira transction itu syntax bukan table
+                using(var cmd = new SqliteCommand(query,connection))
+                {
+                    cmd.Parameters.AddWithValue("@Id", Id);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            Console.WriteLine("Data Transaksi berhasil dihapus !");
+        }  
+        else
+        {
+            Console.WriteLine("Data tidak ditemukan !");
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+
+
+    /////// ------------- ini adalah section of customer ---------------------
+    static void DaftarCustomer()
+    {
+        Console.WriteLine("Daftar Pelanggan : ");
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+            string query = "SELECT * FROM Users ORDER BY name ASC"; /// ASC = ascending, urutkan angka/abjad,even date dari kecil - besar
+            using(var cmd = new SqliteCommand(query, connection))
+            using(var reader = cmd.ExecuteReader())
+            {
+                while(reader.Read())
+                {
+                    Console.WriteLine($@"
+                                        Nim : {reader["nim"]}, 
+                                        Nama : {reader["name"]}, 
+                                        Email : {reader["email"]}");
+                }
+            }
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+
+    static void hapusCustomer() //// hanya bisa dilakukan jika hapus transaksi terlebih dahulu
+    {
+        Console.WriteLine("===== Menu Hapus Customer ====");
+        Console.Write("Masukan nim Pelanggan yang telah terdaftarkan : ");
+
+        if(int.TryParse(Console.ReadLine(), out int nim))
+        {
+            try 
+            {
+                using(var connection = new SqliteConnection(connectionString))
+                {
+                    connection.Open();
+
+                    string query = "DELETE FROM Users WHERE nim = @nim";
+                    using(var cmd = new SqliteCommand(query, connection))
+                    {
+                        cmd.Parameters.AddWithValue("@nim", nim);
+                        cmd.ExecuteNonQuery();
+                    }  
+                }
+                Console.WriteLine($"Customer dengan nim : {nim}, sudah dihapus");
+            }
+           catch(Exception ex)
+            {
+                Console.WriteLine("------ Error: jika mau menghapus customer, hapus transaksi-nya terlebih dahulu" + ex.Message); 
+                /// tidak bisa langsung dihapus, karena ini dihubbungkan dengan table transaksi, kecuali customer tersebt blm melakukan transaksi
+            }
+        }
+        else
+        {
+            Console.WriteLine("nim tidak valid.");
+        }
+
+        Console.WriteLine(); // buat space kosong
+    }
+
+
+
+    /// cari Nim pelanggan berdasarkan table users dari nama customer yang sudah register
+    static int CariCostumer(string nama)
+    {
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string query = "SELECT nim FROM Users WHERE name = @name";
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@name", nama); /// Mengganti placeholder @nama di query dengan nilai nama yang dikirim ke fungsi.
+
+                var result = cmd.ExecuteScalar(); /// syntax menjalankan query mengambil satu nilai , yang dimana disini mengambil nilai nim, contoh Query-nya: SELECT Id FROM Users WHERE Nama = 'John'. Hasilnya adalah nim pelanggan dengan nama "John". Jika nama ada, misalnya ID=5 → result = 5. Jika tidak ada, → result = null.
+                if(result != null)
+                {
+                    return Convert.ToInt32(result); // Jika result tidak null, ubah ke int dan kembalikan
+                }
+                else
+                {
+                    return -1; // Jika result null, kembalikan -1 (penanda tidak ditemukan) 
+                }
+            }
+        }
+
+    }
+
+
+    //// update----------------
+    
+    static void UpdateFilm()
+    {
+        Console.Write("Masukkan ID Film yang ingin diperbarui: ");
+        int ID_Films = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukkan Judul Film baru: ");
+        string Judul = Console.ReadLine() ?? "Default name";
+
+        Console.Write("Masukkan harga beli baru: ");
+        int HargaBeli = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukkan harga Sewa per-Mingguan baru: ");
+        int RentPrice_Week = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukkan harga Sewa per-Bulanan baru: ");
+        int RentPrice_Month = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukkan stok film baru: ");
+        int Stock = Convert.ToInt32(Console.ReadLine());
+
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string query = @"UPDATE Films 
+                            SET Judul_films = @Judul_films, 
+                                BuyPrice = @BuyPrice, 
+                                RentPrice_Week = @RentPrice_Week, 
+                                RentPrice_Month = @RentPrice_Month, 
+                                Stock = @Stock
+                            WHERE ID_Films = @ID_Films";
+
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@ID_Films", ID_Films);
+                cmd.Parameters.AddWithValue("@Judul_films", Judul);
+                cmd.Parameters.AddWithValue("@BuyPrice", HargaBeli);
+                cmd.Parameters.AddWithValue("@RentPrice_Week", RentPrice_Week);
+                cmd.Parameters.AddWithValue("@RentPrice_Month", RentPrice_Month);
+                cmd.Parameters.AddWithValue("@Stock", Stock);
+
+                cmd.ExecuteNonQuery();
+            }
+            Console.WriteLine();
+        }
+
+        Console.WriteLine("Film berhasil diperbarui !.");
+
+        Console.WriteLine(); /// space kosong 
+    }
+
+    static void UpdateCustomer()
+    {
+        Console.Write("Masukkan NIM pengguna yang ingin diperbarui: ");
+        int nim = Convert.ToInt32(Console.ReadLine());
+
+        Console.Write("Masukkan Nama baru: ");
+        string name = Console.ReadLine() ?? "Default name";
+
+        Console.Write("Masukkan Email baru: ");
+        string email = Console.ReadLine() ?? "Default name";
+
+        using(var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+
+            string query = @"UPDATE Users 
+                            SET name = @name, 
+                                email = @email 
+                            WHERE nim = @nim";
+
+            using(var cmd = new SqliteCommand(query, connection))
+            {
+                cmd.Parameters.AddWithValue("@nim", nim);
+                cmd.Parameters.AddWithValue("@name", name);
+                cmd.Parameters.AddWithValue("@email", email);
+
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        Console.WriteLine("Pengguna berhasil diperbarui.");
+        Console.WriteLine();
+    }
+
+
+}
